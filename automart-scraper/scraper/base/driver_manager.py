@@ -6,6 +6,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 class DriverManager:
     def __init__(self, headless=True):
         opts = Options()
+        opts.headless = True
         if headless:
             opts.add_argument('--headless=new')
             opts.add_argument('--no-sandbox')

@@ -3,6 +3,8 @@ from ..base.base_page import BasePage
 from selenium.webdriver.common.by import By
 import time
 import json
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 
 class autolanka_scraper(BaseScraper):
@@ -17,66 +19,51 @@ class autolanka_scraper(BaseScraper):
             return None
 
     def scrape(self):
+
         self.driver.get("https://www.autolanka.com/cars.html")
-        time.sleep(1)
-        
+        wait = WebDriverWait(self.driver, 10)
         print(f"Page title: {self.driver.title}")
         print(f"Current URL: {self.driver.current_url}")
 
         try:
-            listings_container = self.page.find(By.ID, "listings")
+            listings_container = wait.until(EC.presence_of_element_located((By.ID, "listings")))
             print(f"Found listings container")
         except Exception as e:
             print(f"Could not find listings container with ID 'listings': {e}")
-            # Try alternative selectors
-            try:
-                listings_container = self.driver.find_element(By.TAG_NAME, "body")
-                print("Using body as fallback")
-            except:
-                print("Failed to find any container")
-                return []
+            return []
 
-        # Find all car listing items
         cars = listings_container.find_elements(By.CSS_SELECTOR, "article.item")
         print(f"Found {len(cars)} cars with article.item selector")
-        
         if len(cars) == 0:
             print("No car listings found!")
             return []
-        
-        results = []
-        print(f"Starting to scrape {len(cars)} cars...")
 
+        # Collect all car detail links first
+        car_links = []
         for idx, car in enumerate(cars, 1):
             try:
-                # Find the link-large anchor tag
                 link_element = car.find_element(By.CLASS_NAME, "link-large")
                 link = link_element.get_attribute("href")
-                
-                if not link:
-                    print(f"Car {idx}: No href found")
-                    continue
-                
-                print(f"\nCar {idx}/{len(cars)}: Navigating to {link}")
-                
-                # Navigate to detail page
-                self.driver.get(link)
+                if link:
+                    car_links.append(link)
+            except Exception as e:
+                print(f"Car {idx}: Could not get link: {e}")
+        print(f"Collected {len(car_links)} car links.")
 
-                # Extract details from the detail page
-                try:
-                    title = self.driver.find_element(By.TAG_NAME, "h1").text
-                except:
-                    title = "Unknown Title"
-                
+        results = []
+        for idx, link in enumerate(car_links, 1):
+            print(f"\nCar {idx}/{len(car_links)}: Navigating to {link}")
+            self.driver.get(link)
+            try:
+                wait.until(EC.presence_of_element_located((By.TAG_NAME, "h1")))
+                title = self.driver.find_element(By.TAG_NAME, "h1").text
                 print(f"  Title: {title}")
-                
                 try:
-                    price = self.driver.find_element(By.CSS_SELECTOR, ".price-tag, [class*='price']").text
+                    price = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".price-tag, [class*='price']"))).text
                 except:
                     price = "N/A"
-                
                 try:
-                    details = self.driver.find_element(By.CSS_SELECTOR, ".card-info, .listing-details")
+                    details = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".card-info, .listing-details")))
                 except:
                     details = self.driver.find_element(By.TAG_NAME, "body")
 
@@ -114,20 +101,12 @@ class autolanka_scraper(BaseScraper):
                     "additional_info": additional_info,
                     "link": link,
                 }
-
                 print(f"  Extracted data: {car_data}")
-
                 results.append(car_data)
                 print(f"  ✓ Successfully scraped")
                 
-                # Go back to listings page
-                self.driver.back()
-                time.sleep(2)
-                
-                # Re-find the listings container after going back
                 listings_container = self.driver.find_element(By.ID, "listings")
                 cars = listings_container.find_elements(By.CSS_SELECTOR, "article.item")
-                
             except Exception as e:
                 print(f"  ✗ Error scraping car: {e}")
                 # Try to go back to listings page
